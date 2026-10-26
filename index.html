@@ -167,7 +167,7 @@ if(TG){try{TG.ready();TG.expand();TG.setHeaderColor&&TG.setHeaderColor('#111216'
 const START=TG&&TG.initDataUnsafe&&TG.initDataUnsafe.start_param||'';
 const cv=document.getElementById('c'), ctx=cv.getContext('2d');
 const W=cv.width, H=cv.height, $=id=>document.getElementById(id);
-let DPR=Math.min(1.75,window.devicePixelRatio||1);cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);let ftAvg=16,fN=0;ctx.imageSmoothingQuality='high';
+let DPR=Math.min(1.75,window.devicePixelRatio||1);cv.width=Math.round(W*DPR);cv.height=Math.round(H*DPR);let ftAvg=16,fN=0;ctx.imageSmoothingQuality='low';
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const store={get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 
@@ -237,7 +237,7 @@ function renderBoard(){const L=store.get('rr_board',[]),ul=$('localBoard');ul.in
 function addBoard(n,d,s){const L=store.get('rr_board',[]);L.push({n,d,s});L.sort((a,b)=>b.s-a.s);store.set('rr_board',L.slice(0,10))}
 
 /* ---------- track (pseudo-3D) ---------- */
-const SEG=200,RUMBLE=8,ROADW=2200,CAMH=1100,DRAW=220,FOV=100;
+const SEG=200,RUMBLE=8,ROADW=2200,CAMH=1100,FOV=100;let DRAW=220;
 const camDepth=1/Math.tan((FOV/2)*Math.PI/180), PLAYER_Z=CAMH*camDepth;
 let segs=[],trackLen=0;
 const lastY=()=>segs.length?segs[segs.length-1].p2.y:0;
@@ -499,8 +499,9 @@ function drawPlayer(){
   ctx.restore()}
 
 function loop(now){const raw=(now-last)/1000,dt=Math.min(.1,raw);last=now;if(dt>.034){update(dt/2);update(dt/2)}else update(dt);
-  if(g.run){ftAvg=ftAvg*.95+raw*1000*.05;if(++fN>120&&ftAvg>24&&DPR>1){DPR=1;cv.width=W;cv.height=H;fN=0}}
-  ctx.setTransform(DPR,0,0,DPR,0,0);render();requestAnimationFrame(loop)}
+  if(g.run){ftAvg=ftAvg*.95+raw*1000*.05;if(++fN>90&&ftAvg>24){if(DPR>1){DPR=1;cv.width=W;cv.height=H;fN=0}else if(DRAW>140){DRAW=Math.max(140,DRAW-40);fN=0}}}
+  ctx.setTransform(DPR,0,0,DPR,0,0);render();fpsAcc=fpsAcc*.97+raw*1000*.03;ctx.font='600 15px Inter,Arial,sans-serif';ctx.textAlign='left';ctx.fillStyle='rgba(255,255,255,.55)';ctx.fillText('v21 · '+Math.round(1000/Math.max(4,fpsAcc))+' fps',12,H-8);requestAnimationFrame(loop)}
+let fpsAcc=16;
 build();reset();requestAnimationFrame(loop);
 })();
 </script>
