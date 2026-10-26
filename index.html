@@ -237,11 +237,11 @@ function renderBoard(){const L=store.get('rr_board',[]),ul=$('localBoard');ul.in
 function addBoard(n,d,s){const L=store.get('rr_board',[]);L.push({n,d,s});L.sort((a,b)=>b.s-a.s);store.set('rr_board',L.slice(0,10))}
 
 /* ---------- track (pseudo-3D) ---------- */
-const SEG=200,RUMBLE=5,ROADW=2200,CAMH=1100,DRAW=220,FOV=100;
+const SEG=200,RUMBLE=8,ROADW=2200,CAMH=1100,DRAW=220,FOV=100;
 const camDepth=1/Math.tan((FOV/2)*Math.PI/180), PLAYER_Z=CAMH*camDepth;
 let segs=[],trackLen=0;
 const lastY=()=>segs.length?segs[segs.length-1].p2.y:0;
-function addSeg(curve,y){const n=segs.length;segs.push({i:n,curve,p1:{z:n*SEG,y:lastY()},p2:{z:(n+1)*SEG,y},sprites:[],stripe:Math.floor(n/RUMBLE)%2})}
+function addSeg(curve,y){const n=segs.length;segs.push({i:n,curve,p1:{z:n*SEG,y:lastY()},p2:{z:(n+1)*SEG,y},sprites:[],stripe:Math.floor(n/RUMBLE)%2,h:((n*2654435761)>>>0)/4294967296})}
 const ease=(a,b,p)=>a+(b-a)*((-Math.cos(p*Math.PI)/2)+.5);
 function road(e,h,l,c,hill){const sy=lastY(),ey=sy+hill*SEG,t=e+h+l;for(let i=0;i<e;i++)addSeg(ease(0,c,i/e),ease(sy,ey,i/t));for(let i=0;i<h;i++)addSeg(c,ease(sy,ey,(e+i)/t));for(let i=0;i<l;i++)addSeg(ease(c,0,i/l),ease(sy,ey,(e+h+i)/t))}
 function build(){segs=[];
@@ -249,7 +249,7 @@ function build(){segs=[];
   road(30,30,30,-1.6,10);road(40,80,40,0,-25);road(30,50,30,-3.6,0);road(25,40,25,2,15);road(25,25,25,0,-lastY()/SEG);
   trackLen=segs.length*SEG;
   let seed=7;const rnd=()=>((seed=(seed*16807)%2147483647)/2147483647);
-  for(let n=10;n<segs.length;n+=4){const s=segs[n];
+  for(let n=10;n<segs.length;n+=2+Math.floor(rnd()*4)){const s=segs[n];
     if(n%40<20)s.sprites.push({kind:'stand',off:-1.9});else s.sprites.push({kind:'tree',off:-1.6-rnd()*.6});
     if(n%28<6)s.sprites.push({kind:'board',off:1.55});else s.sprites.push({kind:rnd()<.5?'tree':'light',off:1.6+rnd()*.6})}
   segs[2].sprites.push({kind:'gantry',off:0});
@@ -262,7 +262,7 @@ const MAXS=SEG*95, ACC=MAXS/2.6;
 let g;
 function reset(){g={run:false,pos:0,x:0,speed:0,score:0,flags:0,lives:3,lap:1,shield:0,hurt:0,shake:0,steer:0,bank:0,spawnT:0,objs:[],parts:[],msg:'',msgT:0,dist:0,t:0,samples:[],sampT:0,ghostDist:0,ghostX:0,ghostDone:false,rivals:[],pos:4,nitro:1,boosting:false,zoom:1};hud()}
 const KIND={car:{w:.36,hit:1},oil:{w:.42,slow:1},wheel:{w:.22,hit:1},cone:{w:.16,hit:1},flag:{w:.28,pick:'flag'},wrench:{w:.26,pick:'wrench'}};
-function spawn(){const r=Math.random(),kind=r<.42?'car':r<.56?'oil':r<.66?'wheel':r<.76?'cone':r<.93?'flag':'wrench';
+function spawn(){const r=Math.random(),kind=r<.16?'oil':r<.34?'wheel':r<.52?'cone':r<.88?'flag':'wrench';
   g.objs.push({kind,off:[-.66,0,.66][Math.floor(Math.random()*3)],z:(g.pos+SEG*(DRAW-20))%trackLen,v:kind==='car'?MAXS*(.35+Math.random()*.25):0,col:['#2f6fe0','#f2c230','#1fa37a','#eef0f3','#8a4fd8'][Math.floor(Math.random()*5)],spin:0,dx:kind==='wheel'?(Math.random()<.5?-.006:.006):0})}
 
 /* ---------- input ---------- */
@@ -325,11 +325,13 @@ function update(dt){
   // record ghost samples
   g.sampT+=dt;while(g.sampT>=SAMPLE){g.sampT-=SAMPLE;g.samples.push([Math.round(Math.max(0,Math.min(1,g.speed/MAXS))*63),Math.round((g.x+2)/4*63)])}
   // AI rivals
-  {const capS=MAXS*(.86+Math.min(.14,(g.lap-1)*.05));let pos=1;
+  {const capS=MAXS*(.97+Math.min(.04,(g.lap-1)*.02));let pos=1;
   g.rivals.forEach((r,k)=>{let tgt=capS*r.skill*(1+.035*Math.sin(g.t*.6+k*2));const gap=(r.dist-g.dist)/SEG;
-    if(gap>22)tgt*=.84;else if(gap<-45)tgt*=1.06;
+    {const want=7+k*5+Math.sin(g.t*.35+k*2.1)*12;tgt*=1-Math.max(-.1,Math.min(.14,(gap-want)*.011))}
+    for(const o of g.rivals){if(o===r)continue;const d=(o.dist-r.dist)/SEG;if(d>0&&d<7&&Math.abs(o.x-r.x)<.35){tgt*=1.045;if(r.lt>.5){r.tx=o.x>0?-.6:.6;r.lt=.9}}}
+    {const pd=(g.dist-r.dist)/SEG;if(pd>0&&pd<6&&Math.abs(g.x-r.x)<.45){r.tx=g.x>0?-.6:.6;if(r.lt>.6)r.lt=.7}}
     r.v+=(tgt-r.v)*Math.min(1,dt*1.2);r.dist+=r.v*dt;
-    r.lt-=dt;if(r.lt<=0){r.lt=1.5+Math.random()*2.5;r.tx=[-.6,0,.6][Math.floor(Math.random()*3)]}
+    r.lt-=dt;if(r.lt<=0){r.lt=1.2+Math.random()*2;{const free=[-.6,0,.6].filter(l=>!g.rivals.some(o=>o!==r&&Math.abs(o.dist-r.dist)<SEG*6&&Math.abs(o.x-l)<.35));const pool=free.length?free:[-.6,0,.6];r.tx=pool[Math.floor(Math.random()*pool.length)]}}
     r.x+=(r.tx-r.x)*Math.min(1,dt*1.6);if(r.cool>0)r.cool-=dt;
     const lead=r.dist-g.dist;
     if(Math.abs(lead)<SEG*.7&&Math.abs(g.x-r.x)<.5&&r.cool<=0&&g.hurt<=0){r.cool=.8;g.speed=Math.min(g.speed,r.v*.78);g.x+=g.x>=r.x?.18:-.18;r.tx=r.x+(r.x>g.x?.3:-.3);g.shake=.25;burst(W/2,H-160,'#ffd27a',18);say('CONTACT WITH '+r.d.name.replace('The ','').toUpperCase())}
@@ -377,9 +379,10 @@ function render(){
     s.clip=maxY;s.fog=Math.min(1,n/DRAW*1.15);s.loopZ=loop?trackLen:0;vis.push(s);
     if(s.p1.cz<=camDepth||s.p2.Y>=s.p1.Y||s.p2.Y>=maxY)continue;
     const f=s.fog*.9,a=s.p1,b=s.p2;
-    ctx.fillStyle=fogMix(s.stripe?'#2f6e33':'#3a7d3c',f);ctx.fillRect(0,b.Y,W,a.Y-b.Y);
+    ctx.fillStyle=fogMix(s.stripe?(s.h<.5?'#2f6e33':'#2a6a30'):(s.h<.5?'#3a7d3c':'#43873f'),f);ctx.fillRect(0,b.Y,W,a.Y-b.Y);
     poly(a.X,a.Y,a.Wd*10/9,b.X,b.Y,b.Wd*10/9,fogMix(s.stripe?'#e3262f':'#f4f1ea',f));
-    poly(a.X,a.Y,a.Wd,b.X,b.Y,b.Wd,fogMix(s.stripe?'#2b2d33':'#303239',f));
+    poly(a.X,a.Y,a.Wd,b.X,b.Y,b.Wd,fogMix(s.h<.34?'#2a2c32':s.h<.67?'#31333a':'#383a42',f));
+    if(s.h>.8){for(const t of[-.34,.34])poly(a.X+a.Wd*t,a.Y,a.Wd*.16,b.X+b.Wd*t,b.Y,b.Wd*.16,fogMix('#1c1d21',f))}
     if(s.stripe){for(const t of[-1/3,1/3])poly(a.X+a.Wd*2*t,a.Y,a.Wd/40,b.X+b.Wd*2*t,b.Y,b.Wd/40,fogMix('#e8e6df',f))}
     if(s.i<3)poly(a.X,a.Y,a.Wd,b.X,b.Y,b.Wd,(s.i%2)?'#f4f1ea':'#15161a');
     maxY=b.Y}
@@ -390,10 +393,10 @@ function render(){
     for(const sp of s.sprites)drawScenery(sp,s);
     for(const o of g.objs){if(o.gone&&KIND[o.kind].pick)continue;if(Math.floor(o.z/SEG)!==s.i)continue;const pct=(o.z%SEG)/SEG,sc=s.p1.s+(s.p2.s-s.p1.s)*pct;
       const X=s.p1.X+(s.p2.X-s.p1.X)*pct+sc*o.off*ROADW*W/2,Y=s.p1.Y+(s.p2.Y-s.p1.Y)*pct;if(Y>s.clip+4)continue;drawObj(o,X,Y,sc*W*.5,s.fog)}
-    for(const r of g.rivals){if(r.z===null||Math.floor(r.z/SEG)!==s.i)continue;const pct=(r.z%SEG)/SEG,sc=s.p1.s+(s.p2.s-s.p1.s)*pct;if(sc<=0)continue;const X=s.p1.X+(s.p2.X-s.p1.X)*pct+sc*r.x*ROADW*W/2,Y=s.p1.Y+(s.p2.Y-s.p1.Y)*pct;if(Y>s.clip+4)continue;const k=sc*W*.5;ctx.globalAlpha=1-s.fog*.4;carSprite(X,Y,k,r.d.body[0],r.d);ctx.globalAlpha=1;if(k*560>36){const ar=Math.min(26,Math.max(10,k*95)),ay=Y-k*560*.62-ar-4;ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(X,ay+2,ar+3,0,Math.PI*2);ctx.fill();avatar(r.d,X,ay,ar);const nm=r.d.name.replace('The ','').toUpperCase();ctx.font=`600 ${Math.max(13,ar*.95)}px Teko, Impact, sans-serif`;ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.65)';ctx.strokeText(nm,X,ay-ar-5);ctx.fillStyle=r.d.accent;ctx.fillText(nm,X,ay-ar-5)}}
+    for(const r of g.rivals){if(r.z===null||Math.floor(r.z/SEG)!==s.i)continue;const pct=(r.z%SEG)/SEG,sc=s.p1.s+(s.p2.s-s.p1.s)*pct;if(sc<=0)continue;const X=s.p1.X+(s.p2.X-s.p1.X)*pct+sc*r.x*ROADW*W/2,Y=s.p1.Y+(s.p2.Y-s.p1.Y)*pct;if(Y>s.clip+4)continue;const k=sc*W*.5;ctx.globalAlpha=1-s.fog*.4;carSprite(X,Y,k,r.d.body[0],r.d);ctx.globalAlpha=1;if(k*1180>40){const ar=Math.min(30,Math.max(11,k*190)),ay=Y-k*1180*.6-ar-4;ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.arc(X,ay+2,ar+3,0,Math.PI*2);ctx.fill();avatar(r.d,X,ay,ar);const nm=r.d.name.replace('The ','').toUpperCase();ctx.font=`600 ${Math.max(13,ar*.95)}px Teko, Impact, sans-serif`;ctx.textAlign='center';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.65)';ctx.strokeText(nm,X,ay-ar-5);ctx.fillStyle=r.d.accent;ctx.fillText(nm,X,ay-ar-5)}}
     if(ghostZ!==null&&Math.floor(ghostZ/SEG)===s.i){const pct=(ghostZ%SEG)/SEG,sc=s.p1.s+(s.p2.s-s.p1.s)*pct;const X=s.p1.X+(s.p2.X-s.p1.X)*pct+sc*(g.ghostX)*ROADW*W/2,Y=s.p1.Y+(s.p2.Y-s.p1.Y)*pct;
       if(Y<=s.clip+4&&sc>0){ctx.globalAlpha=.55;const d=DRIVERS[rival.drv];carSprite(X,Y,sc*W*.5,d.body[1],d);ctx.globalAlpha=1;
-        ctx.font=`600 ${Math.max(14,sc*W*.5*180)}px Teko, Impact, sans-serif`;ctx.textAlign='center';ctx.fillStyle='#6fd3ff';ctx.fillText(rival.name.toUpperCase(),X,Y-sc*W*.5*560*.9)}}}
+        ctx.font=`600 ${Math.max(14,sc*W*.5*180)}px Teko, Impact, sans-serif`;ctx.textAlign='center';ctx.fillStyle='#6fd3ff';ctx.fillText(rival.name.toUpperCase(),X,Y-sc*W*.5*1180*.9)}}}
   drawPlayer();
   for(const p of g.parts){ctx.globalAlpha=Math.max(0,Math.min(1,p.life*1.6));ctx.fillStyle=p.col;ctx.beginPath();ctx.arc(p.x,p.y,p.sz,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;
   const pct=g.speed/MAXS;if(g.run&&pct>.4&&!reduce){const bo=g.boosting;ctx.strokeStyle=bo?`rgba(160,230,255,${Math.min(.9,(pct-.4)*1.1)})`:`rgba(255,255,255,${(pct-.4)*.75})`;ctx.lineWidth=bo?3:2;const n=bo?26:14;for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2;if(Math.sin(a)>.35&&Math.abs(Math.cos(a))<.6)continue;const r=170+Math.random()*160,L=bo?150:80;ctx.beginPath();ctx.moveTo(W/2+Math.cos(a)*r,H*.45+Math.sin(a)*r*.75);ctx.lineTo(W/2+Math.cos(a)*(r+L),H*.45+Math.sin(a)*(r+L)*.75);ctx.stroke()}}
@@ -473,7 +476,7 @@ function carArt(main,accent,helmet,extra){
 function avatar(d,X,Y,R){const im=d.im;if(!im||!im.complete||!im.naturalWidth)return false;const iw=im.naturalWidth,ih=im.naturalHeight,sr=d.face[2]*iw;
   ctx.save();ctx.beginPath();ctx.arc(X,Y,R,0,Math.PI*2);ctx.closePath();ctx.clip();ctx.drawImage(im,d.face[0]*iw-sr,d.face[1]*ih-sr,sr*2,sr*2,X-R,Y-R,R*2,R*2);ctx.restore();
   ctx.lineWidth=Math.max(2,R*.13);ctx.strokeStyle=d.accent;ctx.beginPath();ctx.arc(X,Y,R,0,Math.PI*2);ctx.stroke();return true}
-function carSprite(X,Y,k,body,d){const w=k*560,h=w*.625;const spr=d?carArt(d.body[0],d.accent,d.helmet,d.extra):carArt(body,'#f4f1ea','#f4f1ea','');ctx.drawImage(spr,X-w/2,Y-h*.97,w,h)}
+function carSprite(X,Y,k,body,d){const w=k*1180,h=w*.625;const spr=d?carArt(d.body[0],d.accent,d.helmet,d.extra):carArt(body,'#f4f1ea','#f4f1ea','');ctx.drawImage(spr,X-w/2,Y-h*.97,w,h)}
 function drawObj(o,X,Y,k,fog){ctx.globalAlpha=1-fog*.5;
   if(o.kind==='car')carSprite(X,Y,k,o.col,null);
   if(o.kind==='oil'){const w=k*700;ctx.fillStyle='rgba(8,8,10,.9)';ctx.beginPath();ctx.ellipse(X,Y,w*.5,w*.12,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='rgba(140,90,220,.35)';ctx.beginPath();ctx.ellipse(X-w*.1,Y-w*.02,w*.18,w*.04,0,0,Math.PI*2);ctx.fill()}
